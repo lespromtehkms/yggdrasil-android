@@ -11,15 +11,28 @@ object ConfigurationProxy {
     private lateinit var file: File
 
     operator fun invoke(applicationContext: Context): ConfigurationProxy {
-        file = File(applicationContext.filesDir, "yggdrasil.conf")
-        if (!file.exists()) {
-            val conf = Mobile.generateConfigJSON()
-            if (file.createNewFile()) {
-                file.writeBytes(conf)
-            }
+        val dir = applicationContext.externalMediaDirs.firstOrNull()
+            ?: applicationContext.getExternalFilesDir(null)
+            ?: applicationContext.filesDir
+        if (!dir.exists()) {
+            dir.mkdirs()
         }
+        file = File(dir, "yggdrasil.conf")
+        ensureFileExists()
         fix()
         return this
+    }
+
+    private fun ensureFileExists() {
+        if (!file.exists() || file.length() == 0L) {
+            file.parentFile?.let {
+                if (!it.exists()) {
+                    it.mkdirs()
+                }
+            }
+            val conf = Mobile.generateConfigJSON()
+            file.writeBytes(conf)
+        }
     }
 
     fun resetJSON() {
@@ -42,9 +55,15 @@ object ConfigurationProxy {
     }
 
     fun updateJSON(fn: (JSONObject) -> Unit) {
-        json = JSONObject(file.readText(Charsets.UTF_8))
+        ensureFileExists()
+        val rawText = file.readText(Charsets.UTF_8).removePrefix("\uFEFF").trim()
+        json = try {
+            JSONObject(rawText)
+        } catch (e: Exception) {
+            JSONObject(String(Mobile.generateConfigJSON()))
+        }
         fn(json)
-        val str = json.toString()
+        val str = json.toString(2)
         file.writeText(str, Charsets.UTF_8)
     }
 
@@ -54,7 +73,17 @@ object ConfigurationProxy {
             json.put("IfName", "none")
             json.put("IfMTU", 65535)
 
-            if (json.getJSONArray("MulticastInterfaces").get(0) is String) {
+            if (!json.has("Peers") || json.isNull("Peers")) {
+                json.put("Peers", JSONArray())
+            }
+            if (!json.has("AllowedPublicKeys") || json.isNull("AllowedPublicKeys")) {
+                json.put("AllowedPublicKeys", JSONArray())
+            }
+
+            if (json.has("MulticastInterfaces") &&
+                json.getJSONArray("MulticastInterfaces").length() > 0 &&
+                json.getJSONArray("MulticastInterfaces").get(0) is String
+            ) {
                 val ar = JSONArray()
                 ar.put(0, JSONObject("""
                     {
@@ -75,7 +104,8 @@ object ConfigurationProxy {
     }
 
     fun getJSONByteArray(): ByteArray {
-        return json.toString().toByteArray(Charsets.UTF_8)
+        fix()
+        return json.toString(2).toByteArray(Charsets.UTF_8)
     }
 
     var multicastListen: Boolean
