@@ -221,7 +221,7 @@ class PeersActivity : AppCompatActivity() {
         }
     }
 
-    private val validSchemes = setOf("tcp", "tls", "quic", "ws", "wss", "socks")
+    private val validSchemes = setOf("tcp", "tls", "quic", "ws", "wss", "socks", "sockstls", "http", "httptls")
 
     private fun validatePeerUri(input: String): String? {
         if (input.isEmpty()) return null
@@ -234,7 +234,7 @@ class PeersActivity : AppCompatActivity() {
         if (scheme == null || scheme !in validSchemes) {
             return getString(R.string.peer_invalid_scheme, validSchemes.joinToString(", "))
         }
-        if (scheme != "socks") {
+        if (scheme !in setOf("socks", "sockstls", "http", "httptls")) {
             if (uri.host.isNullOrEmpty()) {
                 return getString(R.string.peer_missing_host)
             }
